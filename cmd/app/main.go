@@ -42,6 +42,7 @@ type Config struct {
 	DBURL           string
 	TrustedIPHeader string
 	PageSizeDefault int
+	DebugHTTP       bool
 }
 
 type Server struct {
@@ -83,7 +84,8 @@ func loadConfig() Config {
 			ps = n
 		}
 	}
-	return Config{Addr: addr, DBURL: dburl, TrustedIPHeader: trusted, PageSizeDefault: ps}
+	debugHTTP := strings.EqualFold(os.Getenv("LEADERBOARD_DEBUG_HTTP"), "1") || strings.EqualFold(os.Getenv("LEADERBOARD_DEBUG_HTTP"), "true")
+	return Config{Addr: addr, DBURL: dburl, TrustedIPHeader: trusted, PageSizeDefault: ps, DebugHTTP: debugHTTP}
 }
 
 func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
@@ -128,7 +130,9 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	srv := &http.Server{Addr: cfg.Addr, Handler: logMiddleware(logger, mux), ReadHeaderTimeout: 10 * time.Second}
+	h := http.Handler(mux)
+	if cfg.DebugHTTP { h = debugRequestLogger(logger, h) }
+	srv := &http.Server{Addr: cfg.Addr, Handler: logMiddleware(logger, h), ReadHeaderTimeout: 10 * time.Second}
 	logger.Info("listening", "addr", cfg.Addr)
 	return srv.ListenAndServe()
 }
@@ -444,6 +448,31 @@ func logMiddleware(l *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		l.Info("req", "method", r.Method, "path", r.URL.Path, "dur", time.Since(start))
+	})
+}
+
+// debugRequestLogger logs HTTP requests (without body) including headers and basic metadata when enabled.
+func debugRequestLogger(l *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers := map[string][]string{}
+		for k, v := range r.Header {
+			// Copy headers; avoid logging very large values
+			if len(v) > 0 {
+				if len(strings.Join(v, ",")) > 2048 {
+					headers[k] = []string{"<truncated>"}
+				} else {
+					headers[k] = v
+				}
+			}
+		}
+		l.Info("http.debug",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"query", r.URL.RawQuery,
+			"remote", r.RemoteAddr,
+			"headers", headers,
+		)
+		next.ServeHTTP(w, r)
 	})
 }
 
