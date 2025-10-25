@@ -1,0 +1,30 @@
+{{define "add.gohtml"}}
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title></title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#FAFAF7; --ink:#2B2B2B; --line:#E6E2D9}
+body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto; color:var(--ink); background:var(--paper); max-width:720px; margin:0 auto; padding:24px}
+label{display:block; margin-top:12px}
+input,textarea{width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#fff}
+.btn{background:#2B2B2B; color:#fff; padding:10px 14px; border:none; border-radius:6px; cursor:pointer; margin-top:12px}
+.small{color:#6B6A66; font-size:12px}
+</style>
+</head>
+<body>
+  <div class="small" style="margin-bottom:8px">Submit an Exhibit</div>
+  <form method="post" action="/profiles" enctype="multipart/form-data">
+    <label>Full name<input type="text" name="full_name" maxlength="120" required></label>
+    <label>Country<input type="text" name="country" maxlength="80" required></label>
+    <label>City<input type="text" name="city" maxlength="120" required></label>
+    <label>Description (max 160 chars)<textarea name="description" maxlength="160" placeholder="A tasteful 160-character reminder"></textarea></label>
+    <label>Photo (jpeg or webp, up to 1MB)<input type="file" name="photo" accept="image/jpeg,image/webp" required></label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+  <p><a href="/">Back</a></p>
+</body>
+</html>
+{{end}}
