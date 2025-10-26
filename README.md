@@ -13,7 +13,7 @@ Decisions
 Env
 - LEADERBOARD_DB_URL: CockroachDB connection string (postgres-compatible)
 - LEADERBOARD_ADDR: server address, default :8080
-- LEADERBOARD_TRUSTED_IP_HEADER: default X-Forwarded-For
+
 - LEADERBOARD_PAGE_SIZE_DEFAULT: default 20
 
 Run

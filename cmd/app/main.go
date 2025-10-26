@@ -13,7 +13,6 @@ import (
 	_ "image/png"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -34,13 +33,11 @@ const (
 	maxUploadAcceptBytes   = 1 * 1024 * 1024 // 1MB input
 	maxStoredImageBytes    = 500 * 1024       // 500KB in DB
 	maxImageWidth          = 1024
-	defaultTrustedIPHeader = "X-Forwarded-For"
 )
 
 type Config struct {
 	Addr            string
 	DBURL           string
-	TrustedIPHeader string
 	PageSizeDefault int
 	DebugHTTP       bool
 }
@@ -77,7 +74,6 @@ func main() {
 func loadConfig() Config {
 	addr := getenv("LEADERBOARD_ADDR", defaultAddr)
 	dburl := getenv("LEADERBOARD_DB_URL", "")
-	trusted := getenv("LEADERBOARD_TRUSTED_IP_HEADER", defaultTrustedIPHeader)
 	ps := defaultPageSize
 	if v := os.Getenv("LEADERBOARD_PAGE_SIZE_DEFAULT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= maxPageSize {
@@ -85,7 +81,7 @@ func loadConfig() Config {
 		}
 	}
 	debugHTTP := strings.EqualFold(os.Getenv("LEADERBOARD_DEBUG_HTTP"), "1") || strings.EqualFold(os.Getenv("LEADERBOARD_DEBUG_HTTP"), "true")
-	return Config{Addr: addr, DBURL: dburl, TrustedIPHeader: trusted, PageSizeDefault: ps, DebugHTTP: debugHTTP}
+	return Config{Addr: addr, DBURL: dburl, PageSizeDefault: ps, DebugHTTP: debugHTTP}
 }
 
 func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
@@ -154,13 +150,7 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_profiles_sort ON profiles (votes_count DESC, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_profiles_search ON profiles (search_text);`,
-		`CREATE TABLE IF NOT EXISTS votes (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-			voter_ip INET NOT NULL,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			UNIQUE (profile_id, voter_ip)
-		);`,
+
 	}
 	for _, s := range stmts {
 		if _, err := db.ExecContext(ctx, s); err != nil {
@@ -315,7 +305,7 @@ func (s *Server) handleProfileSubroutes(w http.ResponseWriter, r *http.Request) 
 		s.servePhoto(w, r, id)
 	case "vote":
 		if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-		s.voteProfile(w, r, id)
+		s.incrementVote(w, r, id)
 	default:
 		http.NotFound(w, r)
 	}
@@ -342,21 +332,10 @@ func (s *Server) servePhoto(w http.ResponseWriter, r *http.Request, id string) {
 	_, _ = w.Write(b)
 }
 
-func (s *Server) voteProfile(w http.ResponseWriter, r *http.Request, id string) {
-	ip := clientIP(r, s.cfg.TrustedIPHeader)
+func (s *Server) incrementVote(w http.ResponseWriter, r *http.Request, id string) {
 	err := withTx(r.Context(), s.db, func(tx *sql.Tx) error {
-		// Try insert vote
-		_, err := tx.ExecContext(r.Context(), `INSERT INTO votes (profile_id, voter_ip) VALUES ($1, $2) ON CONFLICT (profile_id, voter_ip) DO NOTHING`, id, ip)
-		if err != nil { return err }
-		// Check if row exists to know if we should increment
-		var exists bool
-		err = tx.QueryRowContext(r.Context(), `SELECT true FROM votes WHERE profile_id = $1 AND voter_ip = $2`, id, ip).Scan(&exists)
-		if err != nil { return err }
-		if exists {
-			_, err = tx.ExecContext(r.Context(), `UPDATE profiles SET votes_count = votes_count + 1, updated_at = now() WHERE id = $1`, id)
-			if err != nil { return err }
-		}
-		return nil
+		_, err := tx.ExecContext(r.Context(), `UPDATE profiles SET votes_count = votes_count + 1, updated_at = now() WHERE id = $1`, id)
+		return err
 	})
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
@@ -365,19 +344,6 @@ func (s *Server) voteProfile(w http.ResponseWriter, r *http.Request, id string) 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func clientIP(r *http.Request, header string) string {
-	if header != "" {
-		if v := r.Header.Get(header); v != "" {
-			// For X-Forwarded-For, take the first IP
-			parts := strings.Split(v, ",")
-			ip := strings.TrimSpace(parts[0])
-			return ip
-		}
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil { return host }
-	return r.RemoteAddr
-}
 
 // processImageToWebP attempts to decode JPEG/PNG, resize to max width, and encode as JPEG as a pure-Go fallback
 // Note: Without CGO/libwebp, high-quality WebP encoding isn't available in stdlib. We'll use JPEG with quality tuning
