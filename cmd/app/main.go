@@ -49,6 +49,13 @@ type Server struct {
 	cfg    Config
 }
 
+type ErrorRateLimited string
+
+func (e ErrorRateLimited) Error() string { return string(e) }
+func (ErrorRateLimited) RateLimited()   {}
+
+const ErrRateLimited ErrorRateLimited = "rate limited"
+
 type Profile struct {
 	ID              string
 	FullName        string
@@ -150,7 +157,12 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_profiles_sort ON profiles (votes_count DESC, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_profiles_search ON profiles (search_text);`,
-
+		`CREATE TABLE IF NOT EXISTS votes_recent (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_votes_recent_profile_created ON votes_recent (profile_id, created_at DESC);`,
 	}
 	for _, s := range stmts {
 		if _, err := db.ExecContext(ctx, s); err != nil {
@@ -334,10 +346,21 @@ func (s *Server) servePhoto(w http.ResponseWriter, r *http.Request, id string) {
 
 func (s *Server) incrementVote(w http.ResponseWriter, r *http.Request, id string) {
 	err := withTx(r.Context(), s.db, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(r.Context(), `UPDATE profiles SET votes_count = votes_count + 1, updated_at = now() WHERE id = $1`, id)
-		return err
+		var exists int
+		err := tx.QueryRowContext(r.Context(), `SELECT 1 FROM votes_recent WHERE profile_id = $1 AND created_at > now() - interval '60 minutes' LIMIT 1`, id).Scan(&exists)
+		if err != nil && err != sql.ErrNoRows { return err }
+		if err == nil && exists == 1 {
+			return ErrRateLimited
+		}
+		if _, err := tx.ExecContext(r.Context(), `INSERT INTO votes_recent (profile_id) VALUES ($1)`, id); err != nil { return err }
+		if _, err := tx.ExecContext(r.Context(), `UPDATE profiles SET votes_count = votes_count + 1, updated_at = now() WHERE id = $1`, id); err != nil { return err }
+		return nil
 	})
 	if err != nil {
+		if errors.As(err, new(interface{ RateLimited() })) {
+			http.Error(w, "Too many votes for this exhibit, try again later", http.StatusTooManyRequests)
+			return
+		}
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
