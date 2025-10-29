@@ -1,0 +1,49 @@
+# ko configuration
+# Docs: https://ko.build/config/
+
+# Default target platforms (override with --platform or PLATFORMS env)
+defaultPlatforms:
+  - linux/arm64
+
+# SBOM (Software Bill of Materials) generation mode.
+# Options: none, spdx, cyclonedx. Keep 'none' if you don't need SBOMs.
+sbom: none
+
+# Optional: default base image
+# baseImage: gcr.io/distroless/base-debian12
+
+builds:
+  - id: app
+    importpath: ./cmd/app
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    # Run as non-root (distroless nonroot UID/GID)
+    userID: 65532
+    groupID: 65532
+    labels:
+      org.opencontainers.image.title: bestfriends-app
+      org.opencontainers.image.description: Minimal SSR Go app for anonymous exhibits and voting
+      org.opencontainers.image.source: ${KO_IMAGE_SOURCE}
+      org.opencontainers.image.revision: ${KO_GIT_COMMIT}
+      org.opencontainers.image.version: ${KO_TAG}
+
+  - id: migrate
+    importpath: ./cmd/migrate
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    userID: 65532
+    groupID: 65532
+    labels:
+      org.opencontainers.image.title: bestfriends-migrate
+      org.opencontainers.image.description: Schema migrator for bestfriends
+      org.opencontainers.image.source: ${KO_IMAGE_SOURCE}
+      org.opencontainers.image.revision: ${KO_GIT_COMMIT}
+      org.opencontainers.image.version: ${KO_TAG}

@@ -105,10 +105,6 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return fmt.Errorf("ping db: %w", err)
 	}
 
-	if err := migrate(ctx, db); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
-
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"inc": func(i int) int { return i + 1 },
 		"dec": func(i int) int { if i>1 { return i-1 }; return 1 },
@@ -140,37 +136,6 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	return srv.ListenAndServe()
 }
 
-func migrate(ctx context.Context, db *sql.DB) error {
-	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS profiles (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			full_name STRING NOT NULL,
-			location_country STRING NOT NULL,
-			location_city STRING NOT NULL,
-			description STRING(160) NOT NULL,
-			photo_webp BYTES NOT NULL,
-			photo_content_type STRING NOT NULL DEFAULT 'image/webp',
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			votes_count INT NOT NULL DEFAULT 0,
-			search_text STRING NOT NULL AS (lower(full_name || ' ' || location_country || ' ' || location_city || ' ' || description)) STORED
-		);`,
-		`CREATE INDEX IF NOT EXISTS idx_profiles_sort ON profiles (votes_count DESC, created_at DESC);`,
-		`CREATE INDEX IF NOT EXISTS idx_profiles_search ON profiles (search_text);`,
-		`CREATE TABLE IF NOT EXISTS votes_recent (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-		);`,
-		`CREATE INDEX IF NOT EXISTS idx_votes_recent_profile_created ON votes_recent (profile_id, created_at DESC);`,
-	}
-	for _, s := range stmts {
-		if _, err := db.ExecContext(ctx, s); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
