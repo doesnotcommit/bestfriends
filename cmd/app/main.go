@@ -28,18 +28,15 @@ var templatesFS embed.FS
 // Configurable constants (can be overridden via env)
 const (
 	defaultAddr            = ":8080"
-	defaultPageSize        = 20
-	maxPageSize            = 100
 	maxUploadAcceptBytes   = 1 * 1024 * 1024 // 1MB input
 	maxStoredImageBytes    = 500 * 1024       // 500KB in DB
 	maxImageWidth          = 1024
 )
 
 type Config struct {
-	Addr            string
-	DBURL           string
-	PageSizeDefault int
-	DebugHTTP       bool
+	Addr      string
+	DBURL     string
+	DebugHTTP bool
 }
 
 type Server struct {
@@ -81,14 +78,8 @@ func main() {
 func loadConfig() Config {
 	addr := getenv("LEADERBOARD_ADDR", defaultAddr)
 	dburl := getenv("LEADERBOARD_DB_URL", "")
-	ps := defaultPageSize
-	if v := os.Getenv("LEADERBOARD_PAGE_SIZE_DEFAULT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= maxPageSize {
-			ps = n
-		}
-	}
 	debugHTTP := strings.EqualFold(os.Getenv("LEADERBOARD_DEBUG_HTTP"), "1") || strings.EqualFold(os.Getenv("LEADERBOARD_DEBUG_HTTP"), "true")
-	return Config{Addr: addr, DBURL: dburl, PageSizeDefault: ps, DebugHTTP: debugHTTP}
+	return Config{Addr: addr, DBURL: dburl, DebugHTTP: debugHTTP}
 }
 
 func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
@@ -105,10 +96,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return fmt.Errorf("ping db: %w", err)
 	}
 
-	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"inc": func(i int) int { return i + 1 },
-		"dec": func(i int) int { if i>1 { return i-1 }; return 1 },
-	}).ParseFS(templatesFS, "templates/*.gohtml")
+	tmpl, err := template.ParseFS(templatesFS, "templates/*.gohtml")
 	if err != nil {
 		return fmt.Errorf("parse templates: %w", err)
 	}
@@ -143,19 +131,18 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	page := clampAtoi(r.URL.Query().Get("page"), 1, 1<<31-1, 1)
-	size := clampAtoi(r.URL.Query().Get("page_size"), 1, maxPageSize, s.cfg.PageSizeDefault)
-	offset := (page - 1) * size
 
 	ctx := r.Context()
 	var rows *sql.Rows
 	var err error
+	// Fetch all profiles (with a reasonable limit to prevent abuse)
+	const maxProfiles = 500
 	if q == "" {
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT id::string, full_name, location_country, location_city, description, votes_count, created_at, updated_at
 			FROM profiles
 			ORDER BY votes_count DESC, created_at DESC
-			LIMIT $1 OFFSET $2`, size, offset)
+			LIMIT $1`, maxProfiles)
 	} else {
 		like := "%" + strings.ToLower(q) + "%"
 		rows, err = s.db.QueryContext(ctx, `
@@ -163,7 +150,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 			FROM profiles
 			WHERE search_text LIKE $1
 			ORDER BY votes_count DESC, created_at DESC
-			LIMIT $2 OFFSET $3`, like, size, offset)
+			LIMIT $2`, like, maxProfiles)
 	}
 	if err != nil {
 		http.Error(w, "query error", http.StatusInternalServerError)
@@ -181,11 +168,26 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		list = append(list, p)
 	}
 
+	// Compute min/max votes for CSS scaling
+	minVotes, maxVotes := 0, 0
+	if len(list) > 0 {
+		minVotes = list[0].Votes
+		maxVotes = list[0].Votes
+		for _, p := range list {
+			if p.Votes < minVotes { minVotes = p.Votes }
+			if p.Votes > maxVotes { maxVotes = p.Votes }
+		}
+		// Avoid division by zero in CSS calc when all votes are equal
+		if minVotes == maxVotes {
+			maxVotes = minVotes + 1
+		}
+	}
+
 	data := map[string]any{
 		"Profiles": list,
 		"Query":    q,
-		"Page":     page,
-		"PageSize": size,
+		"MinVotes": minVotes,
+		"MaxVotes": maxVotes,
 	}
 	if err := s.tmpl.ExecuteTemplate(w, "home.gohtml", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)

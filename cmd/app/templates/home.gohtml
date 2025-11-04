@@ -3,28 +3,136 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title></title>
+<title>Best Friends Gallery</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
 <style>
 :root{
   --paper:#FAFAF7; --ink:#2B2B2B; --line:#E6E2D9; --gold:#C8A96A; --plaque:#F5F2EB;
+  --min-photo: 60; --max-photo: 200; --min-font: 12; --max-font: 32;
 }
 body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto; color:var(--ink); background:var(--paper);
-  max-width:960px; margin:0 auto; padding:24px}
-.header{display:flex; gap:12px; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); padding-bottom:12px}
+  max-width:1400px; margin:0 auto; padding:24px}
+.header{display:flex; gap:12px; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:24px}
 .brand{height:28px; width:28px; border:1px solid var(--gold); border-radius:50%; background:linear-gradient(#FCFBF8,#F6F1E6); box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
-.card{display:flex; gap:16px; border:1px solid var(--line); padding:14px; margin:14px 0; border-radius:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.04)}
-.frame{border:1px solid var(--gold); border-radius:8px; padding:4px; background:#FCFBF8}
-.card img{max-width:150px; max-height:150px; display:block}
-.meta{color:#666; font-size:13px; margin:2px 0 6px}
-.plaque{font-size:12px; color:#6B6A66; background:var(--plaque); padding:3px 8px; border-radius:4px; display:inline-block}
-.btn{background:#2B2B2B; color:#fff; padding:8px 12px; text-decoration:none; border-radius:6px; border:none; cursor:pointer}
-.vote{background:#EAD9B4; color:#3A2F1A; border:1px solid var(--gold); box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
-.vote:hover{filter:brightness(.98)}
 .search{flex:1}
 .search input{width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:#fff}
-.controls{display:flex; gap:8px; align-items:center; margin-top:16px}
-.footer{margin-top:24px; color:#777; font-size:12px; text-align:center}
+.btn{background:#2B2B2B; color:#fff; padding:8px 12px; text-decoration:none; border-radius:6px; border:none; cursor:pointer; font-size:14px}
+.btn:hover{filter:brightness(1.1)}
+
+/* Tag cloud layout */
+.cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 150ms ease;
+  cursor: pointer;
+  /* CSS variables set per tile: --votes, --min-votes, --max-votes */
+  /* Compute normalized scale (0 to 1) */
+  --vote-range: calc(var(--max-votes) - var(--min-votes));
+  --vote-norm: calc((var(--votes) - var(--min-votes)) / var(--vote-range));
+  /* Apply bias: 0.2 + 0.8 * norm to ensure minimum visibility */
+  --scale: calc(0.2 + 0.8 * var(--vote-norm));
+  /* Compute sizes */
+  --photo-size: calc(var(--min-photo) * 1px + (var(--max-photo) - var(--min-photo)) * 1px * var(--scale));
+  --font-size: calc(var(--min-font) * 1px + (var(--max-font) - var(--min-font)) * 1px * var(--scale));
+}
+
+.tile:hover {
+  transform: scale(1.05);
+  z-index: 10;
+}
+
+.frame {
+  border: 2px solid var(--gold);
+  border-radius: 8px;
+  padding: 4px;
+  background: #FCFBF8;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  width: var(--photo-size);
+  height: var(--photo-size);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.name {
+  font-family: 'Playfair Display', serif;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: var(--font-size);
+  font-weight: 600;
+  margin-top: 8px;
+  line-height: 1.2;
+  max-width: calc(var(--photo-size) + 40px);
+}
+
+.location {
+  font-size: calc(var(--font-size) * 0.6);
+  color: #666;
+  margin-top: 4px;
+}
+
+.vote-btn {
+  background: #EAD9B4;
+  color: #3A2F1A;
+  border: 1px solid var(--gold);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-top: 8px;
+  font-size: calc(var(--font-size) * 0.7);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.vote-btn:hover {
+  filter: brightness(.95);
+  transform: translateY(-1px);
+}
+
+.description {
+  font-size: calc(var(--font-size) * 0.65);
+  color: #6B6A66;
+  background: var(--plaque);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 6px;
+  max-width: calc(var(--photo-size) + 40px);
+  line-height: 1.3;
+}
+
+.footer {
+  margin-top: 24px;
+  color: #777;
+  font-size: 12px;
+  text-align: center;
+}
+
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  font-size: 16px;
+}
 </style>
 </head>
 <body>
@@ -33,34 +141,33 @@ body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto; color:var(--ink)
     <form class="search" method="get" action="/">
       <input type="text" name="q" value="{{.Query}}" placeholder="Search exhibits by name, location, or note">
     </form>
-    <a class="btn" href="/add">Add</a>
+    <a class="btn" href="/add">Add Exhibit</a>
   </div>
 
   {{if .Profiles}}
-    {{range .Profiles}}
-      <div class="card">
-        <div class="photo frame"><img src="/profiles/{{.ID}}/photo" alt="{{.FullName}}" width="150" height="150"></div>
-        <div>
-          <div style="font-family:'Playfair Display',serif; letter-spacing:.5px; text-transform:uppercase; font-size:18px">{{.FullName}}</div>
-          <div class="meta">{{.Country}}, {{.City}}</div>
-          {{if .Description}}<div class="plaque">{{.Description}}</div>{{end}}
-          <form method="post" action="/profiles/{{.ID}}/vote" style="margin-top:10px">
-            <button class="btn vote" type="submit">+ {{.Votes}}</button>
+    <div class="cloud">
+      {{range .Profiles}}
+        {{/* Set CSS variables for this tile */}}
+        <div class="tile" style="--votes: {{.Votes}}; --min-votes: {{$.MinVotes}}; --max-votes: {{$.MaxVotes}};">
+          <div class="frame">
+            <img src="/profiles/{{.ID}}/photo" alt="{{.FullName}}" loading="lazy">
+          </div>
+          <div class="name">{{.FullName}}</div>
+          <div class="location">{{.Country}}, {{.City}}</div>
+          {{if .Description}}
+            <div class="description">{{.Description}}</div>
+          {{end}}
+          <form method="post" action="/profiles/{{.ID}}/vote">
+            <button class="vote-btn" type="submit">♥ {{.Votes}}</button>
           </form>
         </div>
-      </div>
-    {{end}}
+      {{end}}
+    </div>
   {{else}}
-    <p>No profiles yet.</p>
+    <div class="empty">No profiles yet. Be the first to add an exhibit!</div>
   {{end}}
 
-  <div class="controls">
-    {{if gt .Page 1}}
-      <a class="btn" href="/?q={{.Query}}&page={{dec .Page}}&page_size={{.PageSize}}">Prev</a>
-    {{end}}
-    <span>Page {{.Page}}</span>
-    <a class="btn" href="/?q={{.Query}}&page={{inc .Page}}&page_size={{.PageSize}}">Next</a>
-  </div>
+
 
   <div class="footer">Curated by anonymous cowards since 2025</div>
 </body>
