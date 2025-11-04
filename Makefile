@@ -25,7 +25,7 @@ help:
 .PHONY: _require-repo
 _require-repo:
 	@if [ -z "$(KO_DOCKER_REPO)" ]; then \
-		echo "KO_DOCKER_REPO must be set (e.g., export KO_DOCKER_REPO=ghcr.io/you/bestfriends)"; \
+		echo "KO_DOCKER_REPO must be set (e.g., export KO_DOCKER_REPO=ghcr.io/doesnotcommit/bestfriends)"; \
 		exit 1; \
 	fi
 

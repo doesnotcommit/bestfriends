@@ -3,7 +3,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Best Friends Gallery</title>
+<title></title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -104,7 +104,13 @@ body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto; color:var(--ink)
   transition: all 120ms ease;
 }
 
-.vote-btn:hover {
+.vote-btn[disabled] {
+  /* Banana emoji cursor via inline SVG data URI (fallback to not-allowed) */
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><text x='0' y='24' font-size='24'>🍌</text></svg>") 8 20, not-allowed;
+  opacity: 0.6;
+}
+
+.vote-btn:hover:not([disabled]) {
   filter: brightness(.95);
   transform: translateY(-1px);
 }
@@ -158,7 +164,13 @@ body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto; color:var(--ink)
             <div class="description">{{.Description}}</div>
           {{end}}
           <form method="post" action="/profiles/{{.ID}}/vote">
-            <button class="vote-btn" type="submit">♥ {{.Votes}}</button>
+            {{if $.RateLimitedIDs}}{{if index $.RateLimitedIDs .ID}}
+              <button class="vote-btn" type="submit" disabled title="You can vote again in less than an hour">♥ {{.Votes}}</button>
+            {{else}}
+              <button class="vote-btn" type="submit">♥ {{.Votes}}</button>
+            {{end}}{{else}}
+              <button class="vote-btn" type="submit">♥ {{.Votes}}</button>
+            {{end}}
           </form>
         </div>
       {{end}}

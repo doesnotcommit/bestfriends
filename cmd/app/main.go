@@ -183,11 +183,24 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fetch profiles that have received a vote in the last hour to disable buttons client-side
+	// Note: This mirrors server-side rate limiting which is per-profile (global), not per-user.
+	recent := map[string]bool{}
+	rows2, err := s.db.QueryContext(ctx, `SELECT DISTINCT profile_id::string FROM votes_recent WHERE created_at > now() - interval '60 minutes'`)
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var pid string
+			if err := rows2.Scan(&pid); err == nil { recent[pid] = true }
+		}
+	} // if it fails, we just don't disable in UI; server still enforces
+
 	data := map[string]any{
-		"Profiles": list,
-		"Query":    q,
-		"MinVotes": minVotes,
-		"MaxVotes": maxVotes,
+		"Profiles":       list,
+		"Query":          q,
+		"MinVotes":       minVotes,
+		"MaxVotes":       maxVotes,
+		"RateLimitedIDs": recent,
 	}
 	if err := s.tmpl.ExecuteTemplate(w, "home.gohtml", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
